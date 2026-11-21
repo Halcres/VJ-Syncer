@@ -1,0 +1,49 @@
+# -*- coding: utf-8 -*-
+"""双击启动对时校准工具（独立程序，不影响播放端）。"""
+
+import os
+import sys
+import time
+import traceback
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+os.chdir(HERE)
+sys.path.insert(0, HERE)
+sys.argv = [sys.argv[0]]
+
+
+def note(msg):
+    try:
+        with open(os.path.join(HERE, "boot.log"), "a", encoding="utf-8") as f:
+            f.write("%s  calib %s\n" % (time.strftime("%H:%M:%S"), msg))
+    except OSError:
+        pass
+
+
+def show_error():
+    try:
+        with open(os.path.join(HERE, "error.log"), "a", encoding="utf-8") as f:
+            f.write("\n%s\n%s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"),
+                                    traceback.format_exc()))
+    except OSError:
+        pass
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror("对时工具启动失败", traceback.format_exc())
+        root.destroy()
+    except Exception:
+        pass
+
+
+note("start")
+try:
+    import calibrate
+    note("imported")
+    calibrate.main()
+    note("exit")
+except Exception:
+    note("crash")
+    show_error()

@@ -1,0 +1,25 @@
+# 运行时日志与状态：含本机用户名 / 绝对路径，不要提交
+boot.log
+error.log
+debug.log
+last_video.txt
+last_screen.txt
+last_offset.txt
+last_stretch.txt
+last_grid.txt
+playlist.txt
+show_main.flag
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+
+# 本地回滚快照（用 git tag 代替）
+versions/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini

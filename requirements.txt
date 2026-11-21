@@ -1,0 +1,9 @@
+# 必需：Python 3.8+（标准库即可跑起来，不需要额外安装）
+
+# 可选：需要 MIDI 触发时（例如 FL Studio + loopMIDI）
+#   pip install mido python-rtmidi
+mido>=1.2; python_version >= "3.8"
+python-rtmidi>=1.5; python_version >= "3.8"
+
+# 视频端推荐安装 mpv（不是 pip 包）：
+#   winget install -e --id shinchiro.mpv
