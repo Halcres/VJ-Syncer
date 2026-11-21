@@ -53,7 +53,7 @@ GRID_CHOICES = [
 ]
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = "v1.4.0"
+VERSION = "v1.5.0"
 LAST_VIDEO = os.path.join(HERE, "last_video.txt")
 LAST_SCREEN = os.path.join(HERE, "last_screen.txt")
 LAST_GRID = os.path.join(HERE, "last_grid.txt")
@@ -301,6 +301,8 @@ class App(object):
         self.next2 = None
         self.focused = False
         self.clock_offset = None
+        self.clock_cached = False        # 用的是上次保存的偏差（离线）
+        self.clock_cached_ts = 0.0
         self.probe_q = queue.Queue()
 
         self.ui = pick_family(root, ["Microsoft YaHei UI", "微软雅黑", "Microsoft YaHei", "Segoe UI"])
@@ -853,7 +855,17 @@ class App(object):
                 parts.append("时钟 检测中…")
             else:
                 corr = self._clock_correction() * 1000.0
-                if corr:
+                if self.clock_cached:
+                    when = ""
+                    if self.clock_cached_ts:
+                        when = time.strftime(
+                            "%m-%d", time.localtime(self.clock_cached_ts))
+                    parts.append(
+                        "时钟 %+.0f ms（离线缓存%s%s）"
+                        % (self.clock_offset,
+                           " " + when if when else "",
+                           " · 已补偿" if corr else ""))
+                elif corr:
                     parts.append("时钟 %+.0f ms（已自动补偿 %+.0f ms）"
                                  % (self.clock_offset, corr))
                 else:
@@ -1276,6 +1288,15 @@ class App(object):
             return
         if result:
             self.clock_offset = result[0] * 1000.0
+            self.clock_cached = False
+            sp.save_clock_cache(self.clock_offset, self.cfg.ntp_server)
+        else:
+            # 没联网 / 探测失败：用上次保存的偏差
+            cached = sp.read_clock_cache()
+            if cached is not None:
+                self.clock_offset = cached[0]
+                self.clock_cached_ts = cached[1]
+                self.clock_cached = True
         self.update_footer()
 
     # ---------------------------------------------------------------- 全局按键

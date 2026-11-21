@@ -42,6 +42,8 @@ from ctypes import wintypes
 
 IS_WIN = (os.name == "nt")
 NTP_DELTA = 2208988800          # 1900-01-01 到 1970-01-01 的秒数
+HERE = os.path.dirname(os.path.abspath(__file__))
+CLOCK_CACHE = os.path.join(HERE, "last_clock.txt")
 LOG_PATH = None
 
 # ------------------------------------------------------------------ 小工具
@@ -196,6 +198,28 @@ def ntp_probe(host, timeout=1.2):
         return offset, delay
     except Exception:
         return None
+
+
+def read_clock_cache():
+    """读上次测到的时钟偏差，返回 (偏差ms, 时间戳, 服务器) 或 None。"""
+    try:
+        with open(CLOCK_CACHE, "r", encoding="utf-8") as f:
+            parts = f.read().strip().split("|")
+        ms = float(parts[0])
+        ts = float(parts[1]) if len(parts) > 1 else 0.0
+        server = parts[2] if len(parts) > 2 else ""
+        return ms, ts, server
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def save_clock_cache(ms, server=""):
+    """把这次测到的时钟偏差存下来，供下次离线启动时使用。"""
+    try:
+        with open(CLOCK_CACHE, "w", encoding="utf-8") as f:
+            f.write("%d|%d|%s" % (int(round(ms)), int(time.time()), server))
+    except OSError:
+        pass
 
 
 # ------------------------------------------------------------------ Windows 输入

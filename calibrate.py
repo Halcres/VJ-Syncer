@@ -27,8 +27,9 @@ except ImportError:          # 非 Windows
 import syncplay as sp
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = "v1.4.0"
+VERSION = "v1.5.0"
 OFFSET_FILE = os.path.join(HERE, "last_offset.txt")
+NTP_HOST = "ntp.aliyun.com"
 
 BG = "#0E1116"
 PANEL = "#161B22"
@@ -138,6 +139,8 @@ class CalibApp(object):
         self._last_pos = None
         self._loop_start = None
         self._clock_ms = None
+        self._clock_cached = False
+        self._clock_cached_ts = 0.0
         self._probe_q = queue.Queue()
         self.ui = pick_font(root, ["Microsoft YaHei UI", "微软雅黑",
                                    "Microsoft YaHei", "Segoe UI"])
@@ -297,7 +300,7 @@ class CalibApp(object):
         def work():
             best = None
             for _ in range(3):
-                r = sp.ntp_probe("ntp.aliyun.com")
+                r = sp.ntp_probe(NTP_HOST)
                 if r and (best is None or r[1] < best[1]):
                     best = r
             self._probe_q.put(best)
@@ -326,9 +329,18 @@ class CalibApp(object):
             new_ms = best[0] * 1000.0
             if self._clock_ms is None or abs(new_ms - self._clock_ms) > 5.0:
                 self._clock_ms = new_ms
+                self._clock_cached = False
                 self._restart = True      # 时钟补偿变了，重新对齐循环相位
+            sp.save_clock_cache(new_ms, NTP_HOST)
         else:
-            if self._clock_ms is not None:
+            # 探测失败（没联网）：退回上次保存的偏差
+            cached = sp.read_clock_cache()
+            if cached is not None:
+                self._clock_ms = cached[0]
+                self._clock_cached = True
+                self._clock_cached_ts = cached[1]
+                self._restart = True
+            elif self._clock_ms is not None:
                 self._clock_ms = None
                 self._restart = True
 
@@ -351,7 +363,15 @@ class CalibApp(object):
 
         if self._clock_ms is not None:
             cm = self._clock_ms
-            if 40.0 < abs(cm) <= 2000.0:
+            if self._clock_cached:
+                when = ""
+                if self._clock_cached_ts:
+                    when = time.strftime(
+                        "%m-%d", time.localtime(self._clock_cached_ts))
+                self.ntp_lbl.config(
+                    text="本机与 NTP 偏差 %+.0f ms（离线，用%s测得值）"
+                         % (cm, when or "上次"), fg=DIM)
+            elif 40.0 < abs(cm) <= 2000.0:
                 self.ntp_lbl.config(
                     text="本机与 NTP 偏差 %+.0f ms（已自动补偿）" % cm, fg=DIM)
             else:
