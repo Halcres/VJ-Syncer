@@ -53,7 +53,7 @@ GRID_CHOICES = [
 ]
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = "v1.5.0"
+VERSION = "v1.5.1"
 LAST_VIDEO = os.path.join(HERE, "last_video.txt")
 LAST_SCREEN = os.path.join(HERE, "last_screen.txt")
 LAST_GRID = os.path.join(HERE, "last_grid.txt")

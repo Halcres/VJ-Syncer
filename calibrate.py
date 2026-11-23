@@ -27,7 +27,7 @@ except ImportError:          # 非 Windows
 import syncplay as sp
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = "v1.5.0"
+VERSION = "v1.5.1"
 OFFSET_FILE = os.path.join(HERE, "last_offset.txt")
 NTP_HOST = "ntp.aliyun.com"
 
