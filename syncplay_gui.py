@@ -25,6 +25,7 @@ from ctypes import wintypes
 from tkinter import filedialog
 from tkinter import font as tkfont
 from tkinter import messagebox
+from tkinter import simpledialog
 
 import syncplay as sp
 
@@ -53,8 +54,7 @@ GRID_CHOICES = [
 ]
 
 HERE = sp.app_dir()
-VERSION = "v1.6.1"
-LAST_VIDEO = os.path.join(HERE, "last_video.txt")
+VERSION = "v1.6.2"
 LAST_SCREEN = os.path.join(HERE, "last_screen.txt")
 LAST_GRID = os.path.join(HERE, "last_grid.txt")
 PLAYLIST = os.path.join(HERE, "playlist.txt")
@@ -176,23 +176,6 @@ def single_instance(role):
 
 
 
-def read_last_video():
-    try:
-        with open(LAST_VIDEO, "r", encoding="utf-8") as f:
-            path = f.read().strip()
-        return path if path and os.path.isfile(path) else ""
-    except OSError:
-        return ""
-
-
-def save_last_video(path):
-    try:
-        with open(LAST_VIDEO, "w", encoding="utf-8") as f:
-            f.write(path)
-    except OSError:
-        pass
-
-
 def read_playlist():
     """读取播放列表；只保留仍然存在的文件。"""
     try:
@@ -302,7 +285,6 @@ class App(object):
         self.player = None
         self.midi = None
         self.fl_hwnd = None
-        self.video_path = ""
         self.playlist = []
         self.playlist_index = 0
         self.video_ready = (self.role not in ("video", "both")) or self.cfg.dry_run
@@ -379,6 +361,8 @@ class App(object):
                             font=(self.ui, 9), bd=0)
         for secs, label in GRID_CHOICES:
             grid_menu.add_command(label=label, command=lambda s=secs: self.set_grid(s))
+        grid_menu.add_separator()
+        grid_menu.add_command(label="自定义…", command=self.ask_grid)
         self.grid_btn["menu"] = grid_menu
         self.grid_btn.pack(side="right", padx=(0, 12))
 
@@ -460,10 +444,10 @@ class App(object):
 
         left = tk.Frame(bar, bg=BG)
         left.grid(row=0, column=0, sticky="w")
-        self.video_name = tk.Label(left, text="尚未选择视频", font=(self.ui, 11, "bold"),
+        self.video_name = tk.Label(left, text="尚未添加视频", font=(self.ui, 11, "bold"),
                                    fg=TEXT, bg=BG, anchor="w")
         self.video_name.pack(fill="x")
-        self.video_dir = tk.Label(left, text="点右边“选择视频…”", font=(self.ui, 8),
+        self.video_dir = tk.Label(left, text="点右边“播放列表…”添加", font=(self.ui, 8),
                                   fg=DIM, bg=BG, anchor="w")
         self.video_dir.pack(fill="x")
 
@@ -484,12 +468,6 @@ class App(object):
                              command=lambda i=i: self.set_screen(i))
         self.screen_btn["menu"] = menu
         self.screen_btn.pack(side="left", padx=(0, 8))
-
-        tk.Button(right, text="选择视频…", command=self.choose_video,
-                  font=(self.ui, 9, "bold"), bg=PANEL, fg=TEXT,
-                  activebackground="#202833", activeforeground=TEXT,
-                  relief="flat", bd=0, highlightthickness=1, highlightbackground=BORDER,
-                  padx=14, pady=6, cursor="hand2").pack(side="left")
 
         tk.Button(right, text="播放列表…", command=self.open_playlist_editor,
                   font=(self.ui, 9, "bold"), bg=PANEL, fg=TEXT,
@@ -534,17 +512,25 @@ class App(object):
                 self.player = sp.make_player(self.cfg, idle=True)
             except SystemExit as e:
                 self.set_status("视频未就绪", RED)
-                self.set_msg("播放器没起来，点“选择视频…”重试", AMBER)
+                self.set_msg("播放器没起来，稍后重试或重启程序", AMBER)
                 self.refresh_buttons()
                 messagebox.showerror("播放器启动失败", str(e), parent=self.root)
                 return
 
-        if self.video_path and os.path.isfile(self.video_path):
-            self.load_video(self.video_path, remember=False)
+        if self.playlist and not self.cfg.dry_run and self.player is not None:
+            item = self.playlist[min(self.playlist_index, len(self.playlist) - 1)]
+            try:
+                self.player.load(item)
+                self.video_ready = True
+                self._update_playlist_display()
+            except Exception:
+                self.video_ready = False
+        if not self.playlist:
+            self.set_status("请添加视频", AMBER)
+            self.set_msg("点“播放列表…”把要播的视频加进去", MUTED)
         else:
-            self.set_status("请选择视频", AMBER)
             self.set_msg("输出屏幕已切到 %d" % index, MUTED)
-            self.refresh_buttons()
+        self.refresh_buttons()
 
     def _grid_label(self):
         secs = self.seconds
@@ -563,6 +549,23 @@ class App(object):
         self.update_idle(time.time())
         self.set_msg("间隔已改为 %d 秒，时点 %s"
                      % (interval, "/".join(str(s) for s in self.seconds)), MUTED)
+
+    def ask_grid(self):
+        """手动输入时点间隔（2 ~ 60 秒）。"""
+        if self.state != "idle":
+            self.set_msg("先按 Esc 回到待就位，再改间隔", AMBER)
+            return
+        cur = (self.seconds[1] - self.seconds[0]) if len(self.seconds) >= 2 else 60
+        value = self._dialog(
+            simpledialog.askinteger, "自定义间隔",
+            "每隔多少秒一个时点？（2 ~ 60，两台要填一样的）",
+            parent=self.root, initialvalue=cur, minvalue=2, maxvalue=60)
+        if not value:
+            return
+        self.set_grid([s for s in range(0, 60, value)])
+        if 60 % value:
+            self.set_msg("间隔 %d 秒（提示：%d 不能整除 60，跨分钟处会有一个短间隔）"
+                         % (value, value), AMBER)
 
     def apply_offset(self, _event=None):
         """应用界面上的补偿（毫秒，正=延后，负=提前）。"""
@@ -605,8 +608,31 @@ class App(object):
             self.video_name.config(text="已播完")
             self.video_dir.config(text="播放列表 %d 项" % len(self.playlist))
         elif not self.playlist:
-            self.video_name.config(text="尚未选择视频")
-            self.video_dir.config(text="点“播放列表…”添加，或“选择视频…”选单个")
+            self.video_name.config(text="尚未添加视频")
+            self.video_dir.config(text="点“播放列表…”添加要播的视频")
+
+    def _prepare_playlist(self):
+        """列表变化后：把第一段重新载入播放器并置为就绪（就位按钮才会亮）。"""
+        if not self.playlist:
+            self.video_ready = False
+            if self.state == "idle":
+                self.set_status("请添加视频", AMBER)
+                self.set_msg("点“播放列表…”把要播的视频加进去", MUTED)
+            return
+        self.video_ready = bool(self.cfg.dry_run or self.player is not None)
+        if self.video_ready and not self.cfg.dry_run and self.player is not None:
+            try:
+                self.player.load(self.playlist[0])
+            except Exception:
+                pass
+        if self.state == "idle":
+            if self.video_ready:
+                self.set_status("待就位", DIM)
+                self.set_msg("播放列表 %d 项 · 第 1 项已就绪 · Enter 启动"
+                             % len(self.playlist), MUTED)
+            else:
+                self.set_status("视频未就绪", RED)
+                self.set_msg("播放器没起来，稍后重试或重启程序", AMBER)
 
     def open_playlist_editor(self):
         if self.state != "idle":
@@ -650,6 +676,7 @@ class App(object):
         def commit(sel=None):
             self.playlist_index = 0
             save_playlist(self.playlist)
+            self._prepare_playlist()
             self._update_playlist_display()
             self.refresh_buttons()
             refresh(sel)
@@ -722,25 +749,11 @@ class App(object):
                 pass
         self.set_msg("拉伸全屏：%s" % ("开" if val else "关"), MUTED)
 
-    def choose_video(self):
-        if self.state != "idle":
-            self.set_msg("先按 Esc 回到待就位，再换视频", AMBER)
-            return
-        initial = os.path.dirname(self.video_path) if self.video_path else HERE
-        path = self._dialog(
-            filedialog.askopenfilename,
-            title="选择要播放的视频", initialdir=initial, parent=self.root,
-            filetypes=VIDEO_TYPES)
-        if not path:
-            return
-        self.load_video(path)
-
-    def load_video(self, path, remember=True):
+    def load_video(self, path):
         if not os.path.isfile(path):
             messagebox.showerror("文件不存在", path, parent=self.root)
             return False
 
-        self.video_path = path
         self.cfg.file = path
         if self.video_name is not None:
             self.video_name.config(text=shorten(os.path.basename(path), 42))
@@ -753,7 +766,7 @@ class App(object):
 
         if self.cfg.dry_run:
             self.video_ready = True
-            self._video_ready_ui(path, remember, "演练模式：不加载播放器")
+            self._video_ready_ui(path, "演练模式：不加载播放器")
             return True
 
         # 已经有一个开着的 mpv：直接换片，不再重启进程
@@ -764,7 +777,7 @@ class App(object):
                 self.player = None
             else:
                 self.video_ready = True
-                self._video_ready_ui(path, remember)
+                self._video_ready_ui(path)
                 return True
 
         if self.player is not None:
@@ -780,7 +793,7 @@ class App(object):
             self.player = None
             self.video_ready = False
             self.set_status("视频未就绪", RED)
-            self.set_msg("加载失败，点“选择视频…”重试", AMBER)
+            self.set_msg("加载失败，检查一下播放器", AMBER)
             self.refresh_buttons()
             messagebox.showerror("视频加载失败", str(e), parent=self.root)
             return False
@@ -793,12 +806,10 @@ class App(object):
             return False
 
         self.video_ready = True
-        self._video_ready_ui(path, remember)
+        self._video_ready_ui(path)
         return True
 
-    def _video_ready_ui(self, path, remember, note=None):
-        if remember:
-            save_last_video(path)
+    def _video_ready_ui(self, path, note=None):
         if self.state == "idle":
             self.set_status("待就位", DIM)
             self.set_msg(note or "Enter 就位 · Esc 取消", MUTED)
@@ -976,7 +987,6 @@ class App(object):
                 messagebox.showerror("MIDI 连接失败", str(e), parent=self.root)
 
         if self.role in ("video", "both"):
-            prelaunch_ok = True
             if not self.cfg.dry_run and self.cfg.player == "mpv":
                 self.set_status("启动播放器…", AMBER)
                 self.root.update_idletasks()
@@ -984,20 +994,20 @@ class App(object):
                     self.player = sp.make_player(self.cfg, idle=True)
                     boot_note("mpv idle ready")
                 except SystemExit as e:
-                    prelaunch_ok = False
                     self.player = None
                     self.video_ready = False
                     self.set_status("视频未就绪", RED)
-                    self.set_msg("播放器没起来，点“选择视频…”重试", AMBER)
+                    self.set_msg("播放器没起来，稍后重试或重启程序", AMBER)
                     messagebox.showerror("播放器启动失败", str(e), parent=self.root)
                 except Exception as e:
-                    prelaunch_ok = False
                     self.player = None
                     self.video_ready = False
                     self.set_status("视频未就绪", RED)
                     self.set_msg("播放器没起来：" + str(e), RED)
 
             self.playlist = read_playlist()
+            if not self.playlist and self.cfg.file and os.path.isfile(self.cfg.file):
+                self.playlist = [self.cfg.file]      # 命令行 --file 当成单项列表
             self.playlist_index = 0
             if self.playlist:
                 self.video_ready = True
@@ -1011,12 +1021,8 @@ class App(object):
                 self.set_msg("播放列表 %d 项 · 第 1 项已就绪 · Enter 启动"
                              % len(self.playlist), MUTED)
             else:
-                path = self.cfg.file or read_last_video()
-                if prelaunch_ok and path and os.path.isfile(path):
-                    self.load_video(path, remember=False)
-                elif not path:
-                    self.set_status("请选择视频", AMBER)
-                    self.set_msg("点“选择视频…”挑一个文件", MUTED)
+                self.set_status("请添加视频", AMBER)
+                self.set_msg("点“播放列表…”把要播的视频加进去", MUTED)
         else:
             self.set_status("待就位", DIM)
             self.set_msg("Enter 就位 · Esc 取消", MUTED)
@@ -1534,11 +1540,11 @@ class App(object):
         item = self._current_item() if self.role in ("video", "both") else ""
         if self.role in ("video", "both"):
             if item:
-                if not self.cfg.dry_run and not self.load_video(item, remember=False):
+                if not self.cfg.dry_run and not self.load_video(item):
                     return
                 self._update_playlist_display()
             elif not self.video_ready:
-                self.set_msg("还没有可用的视频，先点“选择视频…”", AMBER)
+                self.set_msg("还没有可用的视频，先在“播放列表…”里添加", AMBER)
                 return
             elif self.player is not None:
                 try:
