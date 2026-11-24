@@ -53,7 +53,7 @@ GRID_CHOICES = [
 ]
 
 HERE = sp.app_dir()
-VERSION = "v1.6.3"
+VERSION = "v1.6.4"
 LAST_SCREEN = os.path.join(HERE, "last_screen.txt")
 LAST_GRID = os.path.join(HERE, "last_grid.txt")
 PLAYLIST = os.path.join(HERE, "playlist.txt")
@@ -582,6 +582,7 @@ class App(object):
         if 60 % value:
             self.set_msg("间隔 %d 秒（提示：%d 不能整除 60，跨分钟处会有一个短间隔）"
                          % (value, value), AMBER)
+        self.root.focus_set()          # 提交后收起光标
         return "break"
 
     def apply_offset(self, _event=None):
@@ -596,11 +597,16 @@ class App(object):
         if self.state != "idle":
             self.offset_var.set("%d" % int(round(self.cfg.offset_ms)))
             self.set_msg("先按 Esc 回到待就位，再改补偿", AMBER)
+            self.root.focus_set()
+            return "break"
+        if abs(value - self.cfg.offset_ms) < 0.5:
+            self.root.focus_set()      # 值没变，只收起光标
             return "break"
         self.cfg.offset_ms = value
         save_last_offset(value)
         self.update_footer()
         self.set_msg("补偿已设为 %+d ms（负数 = 提前触发）" % int(value), MUTED)
+        self.root.focus_set()
         return "break"
 
     # ---------------------------------------------------------------- 播放列表
@@ -865,8 +871,24 @@ class App(object):
         self.root.bind("<Return>", self._on_enter)
         self.root.bind("<KP_Enter>", self._on_enter)
         self.root.bind("<Escape>", self._on_esc)
+        self.root.bind("<Button-1>", self._drop_entry_focus, add="+")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.focus_force()
+
+    def _drop_entry_focus(self, event=None):
+        """点了输入框以外的地方 -> 收起输入焦点，光标不再闪。"""
+        w = getattr(event, "widget", None)
+        if isinstance(w, tk.Entry):
+            return                       # 点在输入框上：正常聚焦它
+        try:
+            focus = self.root.focus_get()
+        except Exception:
+            return
+        if isinstance(focus, tk.Entry):
+            try:
+                self.root.focus_set()
+            except Exception:
+                pass
 
     def _on_enter(self, _event=None):
         self.arm()
