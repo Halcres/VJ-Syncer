@@ -91,3 +91,9 @@ for ($i = 1; $i -le 4; $i++) {
     }
 }
 "完成: $zip  ($([math]::Round((Get-Item $zip).Length / 1MB, 1)) MB)"
+
+# 6) 清理：只保留这次的 zip，删掉构建中间目录
+$keep = Split-Path $zip -Leaf
+Get-ChildItem $root -Filter "*_win64.zip" | Where-Object { $_.Name -ne $keep } |
+    ForEach-Object { "删除旧包: $($_.Name)"; Remove-Item $_.FullName -Force }
+Remove-Item (Join-Path $root "build") -Recurse -Force -ErrorAction SilentlyContinue
