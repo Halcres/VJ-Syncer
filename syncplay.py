@@ -424,6 +424,8 @@ class MpvPlayer(object):
             base.append("--idle=yes")
         if getattr(cfg, "stretch", False):
             base.append("--keepaspect=no")   # 拉伸铺满，不保持宽高比
+        if getattr(cfg, "mute", False):
+            base.append("--mute=yes")        # 静音播放
         if not cfg.no_fullscreen:
             base += ["--fs", "--fs-screen=%d" % cfg.screen]
         if not idle:
@@ -527,6 +529,10 @@ class MpvPlayer(object):
     def set_keepaspect(self, keep):
         """运行时切换是否保持宽高比（keep=False 即拉伸铺满）。"""
         self._cmd("set_property", "keepaspect", bool(keep))
+
+    def set_mute(self, enabled):
+        """运行时切换静音。"""
+        self._cmd("set_property", "mute", bool(enabled))
 
     def load(self, path):
         """往已经开着的 mpv 里换片（比重新启动进程快得多）"""
@@ -810,6 +816,8 @@ def parse_args(argv=None):
     v.add_argument("--no-fullscreen", action="store_true", help="不要全屏")
     v.add_argument("--stretch", action="store_true",
                    help="拉伸画面铺满全屏（不保持宽高比）")
+    v.add_argument("--mute", action="store_true",
+                   help="静音播放视频")
     v.add_argument("--mpv", default="mpv", help="mpv 可执行文件路径")
     v.add_argument("--mpv-pipe", default=r"\\.\pipe\syncplay-mpv", help="mpv IPC 管道名")
     v.add_argument("--vlc", default="vlc", help="VLC 可执行文件路径")

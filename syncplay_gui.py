@@ -55,13 +55,14 @@ GRID_CHOICES = [
 ]
 
 HERE = sp.app_dir()
-VERSION = "v1.6.6"
+VERSION = "v1.6.7"
 LAST_SCREEN = os.path.join(HERE, "last_screen.txt")
 LAST_GRID = os.path.join(HERE, "last_grid.txt")
 PLAYLIST = os.path.join(HERE, "playlist.txt")
 SHOW_FLAG = os.path.join(HERE, "show_main.flag")
 LAST_OFFSET = os.path.join(HERE, "last_offset.txt")
 LAST_STRETCH = os.path.join(HERE, "last_stretch.txt")
+LAST_MUTE = os.path.join(HERE, "last_mute.txt")
 BOOT_LOG = os.path.join(HERE, "boot.log")
 VIDEO_TYPES = [("视频文件", "*.mp4 *.mov *.mkv *.avi *.wmv *.m4v *.mpg *.mpeg"),
                ("所有文件", "*.*")]
@@ -135,6 +136,23 @@ def read_last_stretch():
 def save_last_stretch(enabled):
     try:
         with open(LAST_STRETCH, "w", encoding="utf-8") as f:
+            f.write("1" if enabled else "0")
+    except OSError:
+        pass
+
+
+def read_last_mute():
+    """读取上次是否勾选了「静音」。"""
+    try:
+        with open(LAST_MUTE, "r", encoding="utf-8") as f:
+            return f.read().strip() == "1"
+    except OSError:
+        return False
+
+
+def save_last_mute(enabled):
+    try:
+        with open(LAST_MUTE, "w", encoding="utf-8") as f:
             f.write("1" if enabled else "0")
     except OSError:
         pass
@@ -510,6 +528,17 @@ class App(object):
             highlightthickness=0, padx=6, pady=4, cursor="hand2")
         self.stretch_chk.pack(side="left", padx=(10, 0))
 
+        self.mute_var = tk.BooleanVar(
+            value=bool(getattr(self.cfg, "mute", False)))
+        self.mute_chk = tk.Checkbutton(
+            right, text="静音", variable=self.mute_var,
+            command=self.on_mute_toggle,
+            font=(self.ui, 9, "bold"), bg=BG, fg=TEXT,
+            activebackground=BG, activeforeground=TEXT,
+            selectcolor=PANEL, relief="flat", bd=0,
+            highlightthickness=0, padx=6, pady=4, cursor="hand2")
+        self.mute_chk.pack(side="left", padx=(6, 0))
+
     def _screen_label(self, index):
         return ("屏幕 %d（主屏）" % index) if index == 0 else ("屏幕 %d" % index)
 
@@ -783,6 +812,18 @@ class App(object):
             except Exception:
                 pass
         self.set_msg("拉伸全屏：%s" % ("开" if val else "关"), MUTED)
+
+    def on_mute_toggle(self):
+        """勾选/取消「静音」：立即生效并记住。"""
+        val = bool(self.mute_var.get())
+        self.cfg.mute = val
+        save_last_mute(val)
+        if self.player is not None:
+            try:
+                self.player.set_mute(val)
+            except Exception:
+                pass
+        self.set_msg("静音：%s" % ("开" if val else "关"), MUTED)
 
     def load_video(self, path):
         if not os.path.isfile(path):
@@ -1904,6 +1945,8 @@ def main():
             cfg.offset_ms = saved_off
     if "--stretch" not in argv:
         cfg.stretch = read_last_stretch()
+    if "--mute" not in argv:
+        cfg.mute = read_last_mute()
     boot_note("args " + " ".join(argv) + ("  [compact]" if compact else ""))
     if not single_instance(cfg.role):
         boot_note("already running, exit")
