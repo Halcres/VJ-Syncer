@@ -32,7 +32,7 @@ def show_error():
         from tkinter import messagebox
         root = tk.Tk()
         root.withdraw()
-        messagebox.showerror("对时工具启动失败", traceback.format_exc())
+        messagebox.showerror("VJ Syncer 对时工具启动失败", traceback.format_exc())
         root.destroy()
     except Exception:
         pass

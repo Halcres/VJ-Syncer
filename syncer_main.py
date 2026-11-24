@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """打包版入口：一个 exe，按参数启动不同角色。
 
-  Syncer.exe --role fl                 放节拍器/工程的那台
-  Syncer.exe --role video              放视频的那台
-  Syncer.exe --role video --compact    精简模式（只有右下角提示）
-  Syncer.exe --calibrate               对时工具
+  VJSyncer.exe --role fl                 放节拍器/工程的那台
+  VJSyncer.exe --role video              放视频的那台
+  VJSyncer.exe --role video --compact    精简模式（只有右下角提示）
+  VJSyncer.exe --calibrate               对时工具
 
 不带参数直接双击时，弹一个小窗口让你选。
 """
@@ -43,7 +43,7 @@ def show_error():
         from tkinter import messagebox
         root = tk.Tk()
         root.withdraw()
-        messagebox.showerror("Syncer 启动失败", traceback.format_exc())
+        messagebox.showerror("VJ Syncer 启动失败", traceback.format_exc())
         root.destroy()
     except Exception:
         pass
@@ -63,7 +63,7 @@ def choose_mode():
             pass
 
     root = tk.Tk()
-    root.title("Syncer")
+    root.title("VJ Syncer")
     root.configure(bg="#0E1116")
     root.attributes("-topmost", True)
     tk.Label(root, text="选择要打开的程序", bg="#0E1116", fg="#E9EEF5",

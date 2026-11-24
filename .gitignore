@@ -26,7 +26,7 @@ _pyi/
 build/
 dist/
 *.spec
-Syncer_*_win64.zip
+*_win64.zip
 
 # 编辑器 / 系统
 .vscode/

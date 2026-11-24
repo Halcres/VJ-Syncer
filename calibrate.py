@@ -27,7 +27,7 @@ except ImportError:          # 非 Windows
 import syncplay as sp
 
 HERE = sp.app_dir()
-VERSION = "v1.6.0"
+VERSION = "v1.6.1"
 OFFSET_FILE = os.path.join(HERE, "last_offset.txt")
 NTP_HOST = "ntp.aliyun.com"
 
@@ -82,7 +82,7 @@ def loop_wav(phase, rate=44100):
     body = b"fmt " + struct.pack("<I", len(fmt)) + fmt
     body += b"data" + struct.pack("<I", len(pcm)) + bytes(pcm)
     wav = b"RIFF" + struct.pack("<I", 4 + len(body)) + b"WAVE" + body
-    path = os.path.join(tempfile.gettempdir(), "syncer_beat_loop_%d.wav" % phase)
+    path = os.path.join(tempfile.gettempdir(), "vjsyncer_beat_loop_%d.wav" % phase)
     try:
         with open(path, "wb") as f:
             f.write(wav)
@@ -109,10 +109,21 @@ def save_offset(value):
 
 
 def enable_dpi():
+    """按物理像素渲染，避免界面被系统拉伸发虚（和主程序保持一致）。"""
     if sys.platform != "win32":
         return
+    import ctypes
+    try:                                  # Win10 1703+：Per-Monitor V2
+        if ctypes.windll.user32.SetProcessDpiAwarenessContext(-4):
+            return
+    except Exception:
+        pass
+    try:                                  # Win8.1+：Per-Monitor
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        return
+    except Exception:
+        pass
     try:
-        import ctypes
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except Exception:
         pass

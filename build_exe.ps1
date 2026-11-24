@@ -4,8 +4,8 @@
 #   powershell -ExecutionPolicy Bypass -File .\build_exe.ps1
 #
 # 产物：
-#   dist\Syncer\            解压即用的程序目录（exe + 自带 mpv + 4 个快捷方式）
-#   Syncer_vX.Y.Z_win64.zip 可以直接发给别人
+#   dist\VJSyncer\         解压即用的程序目录（exe + 自带 mpv + 4 个快捷方式）
+#   VJSyncer_vX.Y.Z_win64.zip 可以直接发给别人
 #
 # 首次运行会自动下载 PyInstaller 到 _vendor（不污染系统 Python）。
 
@@ -31,14 +31,15 @@ if (-not (Test-Path (Join-Path $root "_vendor\PyInstaller"))) {
 }
 
 # 2) 打包
-python -m PyInstaller --noconfirm --clean --windowed --onedir --name Syncer `
+$manifest = Join-Path $root "app.manifest"
+python -m PyInstaller --noconfirm --clean --windowed --onedir --name VJSyncer --manifest "$manifest" `
     --distpath dist --workpath build --specpath build `
     --hidden-import calibrate --hidden-import syncplay_gui --hidden-import syncplay `
     syncer_main.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller 失败" }
 
-$out = Join-Path $root "dist\Syncer"
-if (-not (Test-Path (Join-Path $out "Syncer.exe"))) { throw "没找到 Syncer.exe" }
+$out = Join-Path $root "dist\VJSyncer"
+if (-not (Test-Path (Join-Path $out "VJSyncer.exe"))) { throw "没找到 VJSyncer.exe" }
 
 # 3) 自带 mpv
 $mpvOut = Join-Path $out "mpv"
@@ -65,10 +66,10 @@ mpv —— 随包附带（程序会自动优先使用这个版本）
 $ws = New-Object -ComObject WScript.Shell
 function New-Lnk([string]$name, [string]$argline) {
     $lnk = $ws.CreateShortcut((Join-Path $out "$name.lnk"))
-    $lnk.TargetPath = Join-Path $out "Syncer.exe"
+    $lnk.TargetPath = Join-Path $out "VJSyncer.exe"
     $lnk.Arguments = $argline
     $lnk.WorkingDirectory = $out
-    $lnk.IconLocation = (Join-Path $out "Syncer.exe") + ",0"
+    $lnk.IconLocation = (Join-Path $out "VJSyncer.exe") + ",0"
     $lnk.Save()
 }
 New-Lnk "FL端"        "--role fl"
@@ -77,7 +78,7 @@ New-Lnk "视频端-精简" "--role video --compact"
 New-Lnk "对时"        "--calibrate"
 
 # 5) 压缩（杀软可能正在扫描刚复制进来的 mpv.exe，失败就等几秒重试）
-$zip = Join-Path $root ("Syncer_{0}_win64.zip" -f $version)
+$zip = Join-Path $root ("VJSyncer_{0}_win64.zip" -f $version)
 for ($i = 1; $i -le 4; $i++) {
     try {
         if (Test-Path $zip) { Remove-Item $zip -Force }

@@ -53,7 +53,7 @@ GRID_CHOICES = [
 ]
 
 HERE = sp.app_dir()
-VERSION = "v1.6.0"
+VERSION = "v1.6.1"
 LAST_VIDEO = os.path.join(HERE, "last_video.txt")
 LAST_SCREEN = os.path.join(HERE, "last_screen.txt")
 LAST_GRID = os.path.join(HERE, "last_grid.txt")
@@ -158,7 +158,7 @@ def single_instance(role):
     kernel32 = ctypes.windll.kernel32
     kernel32.CreateMutexW.restype = ctypes.c_void_p
     kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
-    _MUTEX = kernel32.CreateMutexW(None, False, "Local\\SyncerGui_" + role)
+    _MUTEX = kernel32.CreateMutexW(None, False, "Local\\VJSyncer_" + role)
     if not _MUTEX:
         return True
     if kernel32.GetLastError() == 183:      # ERROR_ALREADY_EXISTS
@@ -168,7 +168,7 @@ def single_instance(role):
                 f.write(role)
         except OSError:
             pass
-        hwnd = sp.find_window("Syncer")
+        hwnd = sp.find_window("VJ Syncer")
         if hwnd:
             sp.force_foreground(hwnd)
         return False
@@ -213,15 +213,44 @@ def save_playlist(paths):
 
 
 def enable_dpi():
+    """按物理像素渲染，避免界面被系统拉伸发虚。
+
+    打包版由 exe 的 manifest 声明 PerMonitorV2；这里主要给源码运行用。
+    进程已经声明过的话这些调用会失败，忽略即可。
+    """
     if sys.platform != "win32":
         return
-    try:
-        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    try:                                  # Win10 1703+：Per-Monitor V2
+        if ctypes.windll.user32.SetProcessDpiAwarenessContext(-4):
+            return
     except Exception:
-        try:
-            ctypes.windll.user32.SetProcessDPIAware()
-        except Exception:
-            pass
+        pass
+    try:                                  # Win8.1+：Per-Monitor
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        return
+    except Exception:
+        pass
+    try:                                  # 老系统：System
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        return
+    except Exception:
+        pass
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
+
+def dpi_note(root):
+    """把 DPI 感知级别和缩放写进 boot.log，方便排查清晰度问题。"""
+    try:
+        v = ctypes.c_int()
+        ctypes.windll.shcore.GetProcessDpiAwareness(None, ctypes.byref(v))
+        boot_note("dpi aware=%d scaling=%.2f screen=%dx%d"
+                  % (v.value, float(root.tk.call("tk", "scaling")),
+                     root.winfo_screenwidth(), root.winfo_screenheight()))
+    except Exception:
+        pass
 
 
 def fmt_cd(sec):
@@ -318,7 +347,7 @@ class App(object):
 
     def _build(self):
         root = self.root
-        root.title("Syncer — 双机同步起播  " + VERSION)
+        root.title("VJ Syncer — 双机同步起播  " + VERSION)
         root.configure(bg=BG)
         root.attributes("-topmost", self.topmost)
         root.columnconfigure(0, weight=1)
@@ -329,7 +358,7 @@ class App(object):
 
         left = tk.Frame(head, bg=BG)
         left.pack(side="left")
-        tk.Label(left, text="Syncer", font=(self.ui, 19, "bold"), fg=TEXT, bg=BG).pack(side="left")
+        tk.Label(left, text="VJ Syncer", font=(self.ui, 19, "bold"), fg=TEXT, bg=BG).pack(side="left")
         badge_text = self._role_text()
         if self.cfg.dry_run and self.role != "none":
             badge_text += " · 演练"
@@ -923,6 +952,7 @@ class App(object):
     def start(self):
         boot_note("app start")
         boot_note("version " + VERSION)
+        dpi_note(self.root)
         try:
             os.remove(SHOW_FLAG)          # 清掉上次遗留的"显示主界面"请求
         except OSError:
@@ -1075,7 +1105,7 @@ class App(object):
 
     def _work_area(self):
         try:
-            hwnd = sp.find_window("Syncer")
+            hwnd = sp.find_window("VJ Syncer")
             if hwnd:
                 u = ctypes.windll.user32
                 u.MonitorFromWindow.restype = ctypes.c_void_p

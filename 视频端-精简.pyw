@@ -34,7 +34,7 @@ def show_error():
         from tkinter import messagebox
         root = tk.Tk()
         root.withdraw()
-        messagebox.showerror("Syncer 启动失败", traceback.format_exc())
+        messagebox.showerror("VJ Syncer 启动失败", traceback.format_exc())
         root.destroy()
     except Exception:
         pass
