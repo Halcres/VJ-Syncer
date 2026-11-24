@@ -25,7 +25,6 @@ from ctypes import wintypes
 from tkinter import filedialog
 from tkinter import font as tkfont
 from tkinter import messagebox
-from tkinter import simpledialog
 
 import syncplay as sp
 
@@ -54,7 +53,7 @@ GRID_CHOICES = [
 ]
 
 HERE = sp.app_dir()
-VERSION = "v1.6.2"
+VERSION = "v1.6.3"
 LAST_SCREEN = os.path.join(HERE, "last_screen.txt")
 LAST_GRID = os.path.join(HERE, "last_grid.txt")
 PLAYLIST = os.path.join(HERE, "playlist.txt")
@@ -350,21 +349,34 @@ class App(object):
         self.clock = tk.Label(head, text="", font=(self.mono, 11), fg=MUTED, bg=BG)
         self.clock.pack(side="right")
 
+        gridf = tk.Frame(head, bg=BG)
+        gridf.pack(side="right", padx=(0, 12))
+        tk.Label(gridf, text="间隔", font=(self.ui, 9), fg=MUTED,
+                 bg=BG).pack(side="left")
+        self.grid_var = tk.StringVar(value=str(self._interval()))
+        self.grid_entry = tk.Entry(
+            gridf, textvariable=self.grid_var, width=3, justify="center",
+            font=(self.mono, 10), bg=PANEL, fg=TEXT, insertbackground=TEXT,
+            relief="flat", highlightthickness=1, highlightbackground=BORDER)
+        self.grid_entry.pack(side="left", padx=(6, 3), ipady=2)
+        self.grid_entry.bind("<Return>", self.apply_grid_entry)
+        self.grid_entry.bind("<KP_Enter>", self.apply_grid_entry)
+        self.grid_entry.bind("<FocusOut>", self.apply_grid_entry)
+        tk.Label(gridf, text="秒", font=(self.ui, 9), fg=MUTED,
+                 bg=BG).pack(side="left")
+
         self.grid_btn = tk.Menubutton(
-            head, text=self._grid_label() + "  ▾",
-            font=(self.ui, 9, "bold"), bg=PANEL, fg=TEXT,
+            gridf, text="▾", font=(self.ui, 9, "bold"), bg=PANEL, fg=TEXT,
             activebackground="#202833", activeforeground=TEXT,
             relief="flat", bd=0, highlightthickness=1, highlightbackground=BORDER,
-            padx=10, pady=4, cursor="hand2")
+            padx=6, pady=2, cursor="hand2")
         grid_menu = tk.Menu(self.grid_btn, tearoff=0, bg=PANEL, fg=TEXT,
                             activebackground=ACCENT, activeforeground=DARK_TEXT,
                             font=(self.ui, 9), bd=0)
         for secs, label in GRID_CHOICES:
             grid_menu.add_command(label=label, command=lambda s=secs: self.set_grid(s))
-        grid_menu.add_separator()
-        grid_menu.add_command(label="自定义…", command=self.ask_grid)
         self.grid_btn["menu"] = grid_menu
-        self.grid_btn.pack(side="right", padx=(0, 12))
+        self.grid_btn.pack(side="left", padx=(4, 0))
 
         off = tk.Frame(head, bg=BG)
         off.pack(side="right", padx=(0, 14))
@@ -532,10 +544,9 @@ class App(object):
             self.set_msg("输出屏幕已切到 %d" % index, MUTED)
         self.refresh_buttons()
 
-    def _grid_label(self):
+    def _interval(self):
         secs = self.seconds
-        interval = (secs[1] - secs[0]) if len(secs) >= 2 else 60
-        return "间隔 %d 秒" % interval
+        return (secs[1] - secs[0]) if len(secs) >= 2 else 60
 
     def set_grid(self, seconds):
         if self.state != "idle":
@@ -543,29 +554,35 @@ class App(object):
             return
         self.seconds = list(seconds)
         save_last_grid(self.seconds)
-        self.grid_btn.config(text=self._grid_label() + "  ▾")
-        interval = (self.seconds[1] - self.seconds[0]) if len(self.seconds) >= 2 else 60
+        interval = self._interval()
+        self.grid_var.set(str(interval))
         self.update_footer()
         self.update_idle(time.time())
         self.set_msg("间隔已改为 %d 秒，时点 %s"
                      % (interval, "/".join(str(s) for s in self.seconds)), MUTED)
 
-    def ask_grid(self):
-        """手动输入时点间隔（2 ~ 60 秒）。"""
+    def apply_grid_entry(self, _event=None):
+        """直接在主界面输入间隔（2 ~ 60 秒），不弹窗。"""
+        text = self.grid_var.get().strip()
+        cur = str(self._interval())
+        if text == cur:
+            return "break"
+        try:
+            value = int(float(text))
+        except (ValueError, tk.TclError):
+            self.grid_var.set(cur)
+            self.set_msg("间隔要填 2~60 的整数（秒）", AMBER)
+            return "break"
+        value = max(2, min(60, value))
         if self.state != "idle":
+            self.grid_var.set(cur)
             self.set_msg("先按 Esc 回到待就位，再改间隔", AMBER)
-            return
-        cur = (self.seconds[1] - self.seconds[0]) if len(self.seconds) >= 2 else 60
-        value = self._dialog(
-            simpledialog.askinteger, "自定义间隔",
-            "每隔多少秒一个时点？（2 ~ 60，两台要填一样的）",
-            parent=self.root, initialvalue=cur, minvalue=2, maxvalue=60)
-        if not value:
-            return
+            return "break"
         self.set_grid([s for s in range(0, 60, value)])
         if 60 % value:
             self.set_msg("间隔 %d 秒（提示：%d 不能整除 60，跨分钟处会有一个短间隔）"
                          % (value, value), AMBER)
+        return "break"
 
     def apply_offset(self, _event=None):
         """应用界面上的补偿（毫秒，正=延后，负=提前）。"""
