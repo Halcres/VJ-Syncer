@@ -55,7 +55,7 @@ GRID_CHOICES = [
 ]
 
 HERE = sp.app_dir()
-VERSION = "v1.6.5"
+VERSION = "v1.6.6"
 LAST_SCREEN = os.path.join(HERE, "last_screen.txt")
 LAST_GRID = os.path.join(HERE, "last_grid.txt")
 PLAYLIST = os.path.join(HERE, "playlist.txt")

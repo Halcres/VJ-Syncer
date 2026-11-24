@@ -27,7 +27,7 @@ except ImportError:          # 非 Windows
 import syncplay as sp
 
 HERE = sp.app_dir()
-VERSION = "v1.6.5"
+VERSION = "v1.6.6"
 OFFSET_FILE = os.path.join(HERE, "last_offset.txt")
 NTP_HOST = "ntp.aliyun.com"
 
@@ -152,6 +152,9 @@ class CalibApp(object):
         self._clock_ms = None
         self._clock_cached = False
         self._clock_cached_ts = 0.0
+        self._probing = False
+        self._msg_text = ""
+        self._msg_until = 0.0
         self._probe_q = queue.Queue()
         self.ui = pick_font(root, ["Microsoft YaHei UI", "微软雅黑",
                                    "Microsoft YaHei", "Segoe UI"])
@@ -211,6 +214,15 @@ class CalibApp(object):
                   relief="flat", bd=0, highlightthickness=1,
                   highlightbackground=BORDER, padx=14, pady=6,
                   cursor="hand2").pack(side="left")
+
+        self.reprobe_btn = tk.Button(
+            btns, text="重测时钟", command=self.reprobe,
+            font=(ui, 9, "bold"), bg=PANEL, fg=TEXT,
+            activebackground="#202833", activeforeground=TEXT,
+            relief="flat", bd=0, highlightthickness=1,
+            highlightbackground=BORDER, padx=14, pady=6,
+            cursor="hand2")
+        self.reprobe_btn.pack(side="left", padx=(8, 0))
 
         tk.Label(self.root,
                  text="补偿写入 last_offset.txt，播放端会自动读取。",
@@ -307,16 +319,36 @@ class CalibApp(object):
 
     # ---------------------------------------------------------------- 时钟自检
 
-    def _probe_ntp(self):
+    def _probe_ntp(self, manual=False):
+        if self._probing:
+            if manual:
+                self._say("正在测时钟，稍等…")
+            return
+        self._probing = True
+
         def work():
             best = None
             for _ in range(3):
                 r = sp.ntp_probe(NTP_HOST)
                 if r and (best is None or r[1] < best[1]):
                     best = r
-            self._probe_q.put(best)
+            self._probe_q.put((best, manual))
 
         threading.Thread(target=work, daemon=True).start()
+
+    def reprobe(self):
+        """手动重测时钟偏差（节拍不中断，除非偏差变了才重新对齐）。"""
+        if self._probing:
+            self._say("正在测时钟，稍等…")
+            return
+        self._say("正在重测时钟…", 4.0)
+        self.reprobe_btn.config(text="重测中…", state="disabled")
+        self._probe_ntp(manual=True)
+
+    def _say(self, text, sec=4.0):
+        """在偏差那一行临时显示一句话。"""
+        self._msg_text = text
+        self._msg_until = time.time() + sec
 
     # ---------------------------------------------------------------- 主循环
 
@@ -331,29 +363,37 @@ class CalibApp(object):
 
     def upkeep(self):
         try:
-            best = self._probe_q.get_nowait()
+            item = self._probe_q.get_nowait()
         except queue.Empty:
-            best = False
-        if best is False:
-            pass
-        elif best:
-            new_ms = best[0] * 1000.0
-            if self._clock_ms is None or abs(new_ms - self._clock_ms) > 5.0:
-                self._clock_ms = new_ms
-                self._clock_cached = False
-                self._restart = True      # 时钟补偿变了，重新对齐循环相位
-            sp.save_clock_cache(new_ms, NTP_HOST)
-        else:
-            # 探测失败（没联网）：退回上次保存的偏差
-            cached = sp.read_clock_cache()
-            if cached is not None:
-                self._clock_ms = cached[0]
-                self._clock_cached = True
-                self._clock_cached_ts = cached[1]
-                self._restart = True
-            elif self._clock_ms is not None:
-                self._clock_ms = None
-                self._restart = True
+            item = None
+        if item is not None:
+            self._probing = False
+            best, manual = item
+            if hasattr(self, "reprobe_btn"):
+                self.reprobe_btn.config(text="重测时钟", state="normal")
+            if best:
+                new_ms = best[0] * 1000.0
+                if self._clock_ms is None or abs(new_ms - self._clock_ms) > 5.0:
+                    self._clock_ms = new_ms
+                    self._clock_cached = False
+                    self._restart = True      # 时钟补偿变了，重新对齐循环相位
+                sp.save_clock_cache(new_ms, NTP_HOST)
+                if manual:
+                    self._say("重测完成：%+.0f ms" % new_ms)
+            else:
+                # 探测失败（没联网）：有旧值就沿用，第一次才退回保存的值
+                if self._clock_ms is None:
+                    cached = sp.read_clock_cache()
+                    if cached is not None:
+                        self._clock_ms = cached[0]
+                        self._clock_cached = True
+                        self._clock_cached_ts = cached[1]
+                        self._restart = True
+                if manual:
+                    if self._clock_ms is None:
+                        self._say("没联网，也没测到过，按系统时钟")
+                    else:
+                        self._say("没联网，沿用上次 %+.0f ms" % self._clock_ms)
 
         now = time.time()
         self.now_lbl.config(text=time.strftime("%H:%M:%S", time.localtime(now)))
@@ -372,7 +412,9 @@ class CalibApp(object):
         self.next_lbl.config(
             text="下一拍 %.2f 秒 · 第 %d 拍" % (max(0.0, nxt - now), next_pos))
 
-        if self._clock_ms is not None:
+        if now < self._msg_until:
+            self.ntp_lbl.config(text=self._msg_text, fg=MUTED)
+        elif self._clock_ms is not None:
             cm = self._clock_ms
             if self._clock_cached:
                 when = ""
