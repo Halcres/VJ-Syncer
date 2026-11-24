@@ -44,6 +44,8 @@ HINT_KEY = "#010101"    # 右下角提示的"透明色"（用 transparentcolor �
 
 GUI_LEAD = 3.0          # 下一个时点至少还有这么多秒才用它
 FL_RESET_DELAY = 1.0    # FL 端起播后多久自动复位（不用按 Esc）
+PROBE_INTERVAL = 10 * 60 * 1000     # 时钟偏差自动重测间隔：10 分钟
+PROBE_RETRY = 60 * 1000             # 倒计时/演出中推迟重测的间隔
 
 # 时间表间隔选项：10 秒是默认；时点更密，对齐窗口也更小
 GRID_CHOICES = [
@@ -53,7 +55,7 @@ GRID_CHOICES = [
 ]
 
 HERE = sp.app_dir()
-VERSION = "v1.6.4"
+VERSION = "v1.6.5"
 LAST_SCREEN = os.path.join(HERE, "last_screen.txt")
 LAST_GRID = os.path.join(HERE, "last_grid.txt")
 PLAYLIST = os.path.join(HERE, "playlist.txt")
@@ -313,6 +315,8 @@ class App(object):
         self.clock_offset = None
         self.clock_cached = False        # 用的是上次保存的偏差（离线）
         self.clock_cached_ts = 0.0
+        self._probe_busy = False
+        self._probe_manual = False
         self.probe_q = queue.Queue()
 
         self.ui = pick_family(root, ["Microsoft YaHei UI", "微软雅黑", "Microsoft YaHei", "Segoe UI"])
@@ -348,6 +352,14 @@ class App(object):
 
         self.clock = tk.Label(head, text="", font=(self.mono, 11), fg=MUTED, bg=BG)
         self.clock.pack(side="right")
+
+        self.reprobe_btn = tk.Button(
+            head, text="重测时钟", command=lambda: self._probe_clock(manual=True),
+            font=(self.ui, 8), bg=PANEL, fg=MUTED,
+            activebackground="#202833", activeforeground=TEXT,
+            relief="flat", bd=0, highlightthickness=1, highlightbackground=BORDER,
+            padx=8, pady=2, cursor="hand2")
+        self.reprobe_btn.pack(side="right", padx=(0, 10))
 
         gridf = tk.Frame(head, bg=BG)
         gridf.pack(side="right", padx=(0, 12))
@@ -1069,6 +1081,7 @@ class App(object):
         self.refresh_buttons()
         self.update_footer()
         self._probe_clock()
+        self.root.after(PROBE_INTERVAL, self._probe_tick)
         self.heartbeat()
         self._starting = False
         boot_note("app ready")
@@ -1339,10 +1352,21 @@ class App(object):
         if event.widget is self.root and self.overlay_visible:
             self.hide_overlay()
 
-    def _probe_clock(self):
+    def _probe_clock(self, manual=False):
+        """测一次时钟偏差；manual=True 表示用户点「重测时钟」。"""
         if self.cfg.no_ntp:
+            if manual:
+                self.set_msg("启动时带了 --no-ntp，不做时钟检测", AMBER)
             self.update_footer()
             return
+        if self._probe_busy:
+            if manual:
+                self.set_msg("正在测时钟，稍等…", MUTED)
+            return
+        self._probe_busy = True
+        self._probe_manual = manual
+        if manual:
+            self.set_msg("正在重测时钟偏差…", MUTED)
 
         def work():
             best = None
@@ -1355,23 +1379,45 @@ class App(object):
         threading.Thread(target=work, daemon=True).start()
         self.root.after(200, self._poll_probe)
 
+    def _probe_tick(self):
+        """每 10 分钟自动重测一次（倒计时/演出中推迟）。"""
+        if self._closing:
+            return
+        if self.state in ("armed", "prepare", "fired"):
+            self.root.after(PROBE_RETRY, self._probe_tick)
+            return
+        self._probe_clock()
+        self.root.after(PROBE_INTERVAL, self._probe_tick)
+
     def _poll_probe(self):
         try:
             result = self.probe_q.get_nowait()
         except queue.Empty:
             self.root.after(200, self._poll_probe)
             return
+        manual = self._probe_manual
+        self._probe_busy = False
+        self._probe_manual = False
         if result:
             self.clock_offset = result[0] * 1000.0
             self.clock_cached = False
             sp.save_clock_cache(self.clock_offset, self.cfg.ntp_server)
+            if manual:
+                self.set_msg("时钟重测完成：%+.0f ms" % self.clock_offset, MUTED)
         else:
-            # 没联网 / 探测失败：用上次保存的偏差
-            cached = sp.read_clock_cache()
-            if cached is not None:
-                self.clock_offset = cached[0]
-                self.clock_cached_ts = cached[1]
-                self.clock_cached = True
+            # 没联网 / 探测失败：保持原来的值（首次启动时才退回上次保存的值）
+            if self.clock_offset is None:
+                cached = sp.read_clock_cache()
+                if cached is not None:
+                    self.clock_offset = cached[0]
+                    self.clock_cached_ts = cached[1]
+                    self.clock_cached = True
+            if manual:
+                if self.clock_offset is None:
+                    self.set_msg("没联网，也没测到过，暂时按系统时钟", AMBER)
+                else:
+                    self.set_msg("没联网，继续用上次的 %+.0f ms" % self.clock_offset,
+                                 AMBER)
         self.update_footer()
 
     # ---------------------------------------------------------------- 全局按键
