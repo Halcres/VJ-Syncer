@@ -18,6 +18,16 @@ __pycache__/
 # 本地回滚快照（用 git tag 代替）
 versions/
 
+# 打包相关（不提交构建产物和依赖）
+_vendor/
+_dl/
+_tmp/
+_pyi/
+build/
+dist/
+*.spec
+Syncer_*_win64.zip
+
 # 编辑器 / 系统
 .vscode/
 .idea/

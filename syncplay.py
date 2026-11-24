@@ -42,7 +42,14 @@ from ctypes import wintypes
 
 IS_WIN = (os.name == "nt")
 NTP_DELTA = 2208988800          # 1900-01-01 到 1970-01-01 的秒数
-HERE = os.path.dirname(os.path.abspath(__file__))
+def app_dir():
+    """程序所在目录：打包成 exe 后是 exe 所在目录，源码运行时是脚本目录。"""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+HERE = app_dir()
 CLOCK_CACHE = os.path.join(HERE, "last_clock.txt")
 LOG_PATH = None
 
@@ -668,10 +675,22 @@ PLAYER_PATHS = {
 }
 
 
+# 随包自带的播放器（打包版优先用这些，保证行为和开发时一致）
+BUNDLED_PATHS = {
+    "mpv": [
+        os.path.join(HERE, "mpv", "mpv.exe"),
+        os.path.join(HERE, "mpv.exe"),
+    ],
+}
+
+
 def resolve_exe(player, configured):
     """在 PATH 和常见安装位置里找播放器，找不到返回 None。"""
     if os.path.isfile(configured):
         return configured
+    for cand in BUNDLED_PATHS.get(player, []):     # 随包自带的优先
+        if os.path.isfile(cand):
+            return cand
     has_dir = os.sep in configured or (os.altsep is not None and os.altsep in configured)
     if not has_dir:
         found = shutil.which(configured)

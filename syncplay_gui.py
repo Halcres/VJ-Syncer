@@ -52,8 +52,8 @@ GRID_CHOICES = [
     ((0, 20, 40), "20 秒"),
 ]
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = "v1.5.1"
+HERE = sp.app_dir()
+VERSION = "v1.6.0"
 LAST_VIDEO = os.path.join(HERE, "last_video.txt")
 LAST_SCREEN = os.path.join(HERE, "last_screen.txt")
 LAST_GRID = os.path.join(HERE, "last_grid.txt")
